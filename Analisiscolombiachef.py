@@ -6,13 +6,6 @@ from datetime import datetime
 import numpy as np
 import re
 import pandas as pd
-import streamlit as st
-
-try:
-    df = pd.read_excel("INFORME SEMESTRAL1.xlsx")
-    st.success("Archivo cargado correctamente.")
-except Exception as e:
-    st.error(f"Error al cargar el archivo: {e}")
 
 # Configuración avanzada
 st.set_page_config(
@@ -42,8 +35,13 @@ def normalize_column_name(name, existing_names):
 
 # Función para cargar y preparar datos
 @st.cache_data
+def load_data(uploaded_file):
     # Leer archivo según su tipo
+    if uploaded_file.name.endswith('.csv'):
+        df = pd.read_csv(uploaded_file, delimiter=';', thousands=',', decimal='.', encoding='latin1')
     else:
+        df = pd.read_excel(uploaded_file)
+    
     # Normalizar nombres de columnas evitando duplicados
     existing_names = set()
     normalized_columns = []
@@ -535,6 +533,9 @@ st.markdown("""
 # Inicializar df como None
 df = None
 
+# Carga de datos
+uploaded_file = st.sidebar.file_uploader("📤 Subir datos de ventas", type=['csv', 'xlsx'])
+
 if uploaded_file is not None:
     try:
         df = load_data(uploaded_file)
@@ -781,3 +782,4 @@ if df is not None and not df.empty:
             st.sidebar.caption(f"🎯 {df['segmento'].nunique()} segmentos")
 else:
     st.error("No hay datos disponibles para analizar. Por favor verifica la carga de datos.")
+

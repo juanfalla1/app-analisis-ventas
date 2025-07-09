@@ -42,13 +42,8 @@ def normalize_column_name(name, existing_names):
 
 # Función para cargar y preparar datos
 @st.cache_data
-def load_data(uploaded_file):
     # Leer archivo según su tipo
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file, delimiter=';', thousands=',', decimal='.', encoding='latin1')
     else:
-        df = pd.read_excel(uploaded_file)
-    
     # Normalizar nombres de columnas evitando duplicados
     existing_names = set()
     normalized_columns = []

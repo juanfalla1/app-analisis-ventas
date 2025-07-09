@@ -540,9 +540,6 @@ st.markdown("""
 # Inicializar df como None
 df = None
 
-# Carga de datos
-uploaded_file = st.sidebar.file_uploader("📤 Subir datos de ventas", type=['csv', 'xlsx'])
-
 if uploaded_file is not None:
     try:
         df = load_data(uploaded_file)

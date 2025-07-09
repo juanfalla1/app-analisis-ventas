@@ -6,6 +6,13 @@ from datetime import datetime
 import numpy as np
 import re
 import pandas as pd
+import streamlit as st
+
+try:
+    df = pd.read_excel("INFORME SEMESTRAL1.xlsx")
+    st.success("Archivo cargado correctamente.")
+except Exception as e:
+    st.error(f"Error al cargar el archivo: {e}")
 
 # Configuración avanzada
 st.set_page_config(

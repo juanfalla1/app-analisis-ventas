@@ -17,8 +17,7 @@ st.set_page_config(
 )
 
 # URL del archivo en GitHub (reemplaza con tu URL real)
-GITHUB_RAW_URL = "https://raw.githubusercontent.com/juanfalla1/app-analisis-ventas/main/ventas_2024.xlsx
-"
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/juanfalla1/app-analisis-ventas/main/ventas_2024.xlsx"
 
 # Función para cargar datos desde GitHub
 @st.cache_data

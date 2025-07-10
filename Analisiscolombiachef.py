@@ -16,25 +16,38 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# URL del archivo en GitHub (reemplaza con tu URL real)
-GITHUB_RAW_URL = "https://raw.githubusercontent.com/juanfalla1/app-analisis-ventas/main/ventas_2024.xlsx"
+# URL para tu archivo en GitHub
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/juanfalla1/app-analisis-ventas/main/INFORME%20SEMESTRAL1.xlsx"
 
 # Función para cargar datos desde GitHub
 @st.cache_data
 def load_data_from_github():
     try:
+        st.info(f"🔍 Cargando datos desde GitHub: {GITHUB_RAW_URL}")
         response = requests.get(GITHUB_RAW_URL)
-        response.raise_for_status()
+        response.raise_for_status()  # Verificar errores HTTP
         
         # Determinar tipo de archivo
-        if GITHUB_RAW_URL.endswith('.csv'):
+        if GITHUB_RAW_URL.lower().endswith('.csv'):
             df = pd.read_csv(BytesIO(response.content), delimiter=';', thousands=',', decimal='.', encoding='latin1')
         else:
             df = pd.read_excel(BytesIO(response.content))
         
+        st.success("✅ ¡Datos cargados exitosamente desde GitHub!")
         return process_data(df)
+    
+    except requests.exceptions.HTTPError as http_err:
+        st.error(f"🚨 Error HTTP al cargar datos: {http_err}")
+        if response.status_code == 404:
+            st.error("El archivo no fue encontrado. Verifica la URL:")
+            st.error(GITHUB_RAW_URL)
+        return None
     except Exception as e:
-        st.error(f"Error al cargar datos desde GitHub: {str(e)}")
+        st.error(f"🚨 Error inesperado: {str(e)}")
+        st.error("Detalles técnicos:")
+        if 'response' in locals():
+            st.error(f"Status code: {response.status_code}")
+            st.error(f"Tamaño respuesta: {len(response.content)} bytes")
         return None
 
 # Función para normalizar nombres de columnas
@@ -193,7 +206,7 @@ def comparacion_anual(df, year1, year2):
     
     return df_year1, df_year2
 
-# Función para rankings comparativos (CORREGIDA)
+# Función para rankings comparativos
 def rankings_comparativos(df_year1, df_year2, year1, year2, mes=None):
     if mes:
         df_year1 = df_year1[df_year1['mes'] == mes]
@@ -254,7 +267,7 @@ def rankings_comparativos(df_year1, df_year2, year1, year2, mes=None):
                    f'ventas_{year1}', f'ventas_{year2}', 
                    'diferencia_ventas', 'crecimiento']
     
-    # CORRECCIÓN: Crear tabla con estilo CORREGIDO
+    # Crear tabla con estilo
     styled_df = df_combined[display_cols].style \
         .format({
             f'ventas_{year1}': '${:,.0f}',
@@ -541,7 +554,7 @@ def analisis_segmentos(df):
 # Interfaz principal
 st.title("🔍 Análisis Estratégico Profundo de Ventas")
 st.markdown("""
-**Diagnóstico integral con comparación anual (2024 vs 2025)**  
+**Diagnóstico integral con comparación anual**  
 *Nivel Gerencial - Enfoque en Causa Raíz - Rankings comparativos*
 """)
 
@@ -549,7 +562,18 @@ st.markdown("""
 df = load_data_from_github()
 
 if df is None or df.empty:
-    st.error("No se pudieron cargar datos válidos desde GitHub. Verifique la conexión o el formato del archivo.")
+    st.error("""
+    **No se pudieron cargar datos válidos desde GitHub.**  
+    Por favor verifica:
+    1. La URL en la variable GITHUB_RAW_URL es correcta
+    2. El archivo existe en el repositorio
+    3. El repositorio es público
+    
+    URL actual:  
+    `{}`
+    """.format(GITHUB_RAW_URL))
+    
+    st.image("https://raw.githubusercontent.com/plotly/datasets/master/github_404.png", width=300)
     st.stop()
 
 # Mostrar vista previa de datos

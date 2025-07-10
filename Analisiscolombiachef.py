@@ -10,7 +10,7 @@ from io import BytesIO
 
 # Configuración avanzada
 st.set_page_config(
-    page_title="Análisis Estratégico Profundo de Ventas",
+    page_title="Análisis Estratégico INFORME SEMESTRAL",
     layout="wide",
     page_icon="🔍",
     initial_sidebar_state="expanded"

@@ -19,11 +19,10 @@ st.set_page_config(
 # URL para tu archivo en GitHub
 GITHUB_RAW_URL = "https://raw.githubusercontent.com/juanfalla1/app-analisis-ventas/main/INFORME%20SEMESTRAL1.xlsx"
 
-# Función para cargar datos desde GitHub
+# Función para cargar datos desde GitHub (mensajes ocultos)
 @st.cache_data
 def load_data_from_github():
     try:
-        st.info(f"🔍 Cargando datos desde GitHub: {GITHUB_RAW_URL}")
         response = requests.get(GITHUB_RAW_URL)
         response.raise_for_status()  # Verificar errores HTTP
         
@@ -33,7 +32,6 @@ def load_data_from_github():
         else:
             df = pd.read_excel(BytesIO(response.content))
         
-        st.success("✅ ¡Datos cargados exitosamente desde GitHub!")
         return process_data(df)
     
     except requests.exceptions.HTTPError as http_err:
@@ -558,8 +556,9 @@ st.markdown("""
 *Nivel Gerencial - Enfoque en Causa Raíz - Rankings comparativos*
 """)
 
-# Cargar datos automáticamente desde GitHub
-df = load_data_from_github()
+# Cargar datos automáticamente desde GitHub (sin mensajes)
+with st.spinner("Cargando datos..."):
+    df = load_data_from_github()
 
 if df is None or df.empty:
     st.error("""
@@ -803,4 +802,3 @@ if not df.empty:
         st.sidebar.caption(f"🏙️ {df['ciudad'].nunique()} ciudades")
     if 'segmento' in df.columns:
         st.sidebar.caption(f"🎯 {df['segmento'].nunique()} segmentos")
-

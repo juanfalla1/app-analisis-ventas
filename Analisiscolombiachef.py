@@ -5,7 +5,8 @@ import plotly.graph_objects as go
 from datetime import datetime
 import numpy as np
 import re
-import pandas as pd
+import requests
+from io import BytesIO
 
 # Configuración avanzada
 st.set_page_config(
@@ -14,6 +15,27 @@ st.set_page_config(
     page_icon="🔍",
     initial_sidebar_state="expanded"
 )
+
+# URL del archivo en GitHub (reemplaza con tu URL real)
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/tuusuario/turepositorio/main/datos_ventas.xlsx"
+
+# Función para cargar datos desde GitHub
+@st.cache_data
+def load_data_from_github():
+    try:
+        response = requests.get(GITHUB_RAW_URL)
+        response.raise_for_status()
+        
+        # Determinar tipo de archivo
+        if GITHUB_RAW_URL.endswith('.csv'):
+            df = pd.read_csv(BytesIO(response.content), delimiter=';', thousands=',', decimal='.', encoding='latin1')
+        else:
+            df = pd.read_excel(BytesIO(response.content))
+        
+        return process_data(df)
+    except Exception as e:
+        st.error(f"Error al cargar datos desde GitHub: {str(e)}")
+        return None
 
 # Función para normalizar nombres de columnas
 def normalize_column_name(name, existing_names):
@@ -33,15 +55,8 @@ def normalize_column_name(name, existing_names):
     existing_names.add(name)
     return name
 
-# Función para cargar y preparar datos
-@st.cache_data
-def load_data(uploaded_file):
-    # Leer archivo según su tipo
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file, delimiter=';', thousands=',', decimal='.', encoding='latin1')
-    else:
-        df = pd.read_excel(uploaded_file)
-    
+# Función para procesar datos
+def process_data(df):
     # Normalizar nombres de columnas evitando duplicados
     existing_names = set()
     normalized_columns = []
@@ -530,256 +545,238 @@ st.markdown("""
 *Nivel Gerencial - Enfoque en Causa Raíz - Rankings comparativos*
 """)
 
-# Inicializar df como None
-df = None
+# Cargar datos automáticamente desde GitHub
+df = load_data_from_github()
 
-# Carga de datos
-uploaded_file = st.sidebar.file_uploader("📤 Subir datos de ventas", type=['csv', 'xlsx'])
-
-if uploaded_file is not None:
-    try:
-        df = load_data(uploaded_file)
-        
-        if df is None or df.empty:
-            st.error("No se pudo cargar datos válidos. Verifique el formato del archivo.")
-            st.stop()
-        
-        # Mostrar vista previa de datos
-        st.sidebar.markdown("### Vista previa de datos")
-        st.sidebar.dataframe(df.head(3))
-        st.sidebar.markdown(f"**Columnas disponibles:** {', '.join(df.columns)}")
-        
-    except Exception as e:
-        st.error(f"Error al cargar los datos: {str(e)}")
-        st.stop()
-else:
-    st.info("👋 ¡Bienvenido! Por favor carga tu archivo de datos para comenzar el análisis")
+if df is None or df.empty:
+    st.error("No se pudieron cargar datos válidos desde GitHub. Verifique la conexión o el formato del archivo.")
     st.stop()
 
-# Si llegamos aquí, df está definida y tiene datos
-if df is not None and not df.empty:
-    # Filtros
-    st.sidebar.header("🔧 Filtros Analíticos")
+# Mostrar vista previa de datos
+st.sidebar.markdown("### Vista previa de datos")
+st.sidebar.dataframe(df.head(3))
+st.sidebar.markdown(f"**Columnas disponibles:** {', '.join(df.columns)}")
 
-    # Filtro de fechas
-    if 'fecha' in df.columns:
-        min_date = df['fecha'].min().date()
-        max_date = df['fecha'].max().date()
-        fecha_inicio = st.sidebar.date_input("Fecha inicial", min_date)
-        fecha_fin = st.sidebar.date_input("Fecha final", max_date)
-        
-        # Convertir a datetime
-        fecha_inicio = pd.to_datetime(fecha_inicio)
-        fecha_fin = pd.to_datetime(fecha_fin)
-        
-        # Aplicar filtro de fechas
-        df = df[(df['fecha'] >= fecha_inicio) & (df['fecha'] <= fecha_fin)]
-    else:
-        st.sidebar.warning("No se encontró columna 'fecha' para filtrar")
+# Filtros
+st.sidebar.header("🔧 Filtros Analíticos")
 
-    # Filtro de ciudades
-    if 'ciudad' in df.columns:
-        try:
-            ciudades = ["Todas"] + sorted(df['ciudad'].dropna().astype(str).unique().tolist())
-            ciudad_seleccionada = st.sidebar.selectbox("Filtrar por ciudad", ciudades)
-            if ciudad_seleccionada != "Todas":
-                df = df[df['ciudad'] == ciudad_seleccionada]
-        except Exception as e:
-            st.sidebar.error(f"Error al procesar ciudades: {str(e)}")
-    else:
-        st.sidebar.warning("No se encontró columna 'ciudad' para filtrar")
-
-    # Filtro de segmentos
-    if 'segmento' in df.columns:
-        try:
-            segmentos = ["Todos"] + sorted(df['segmento'].dropna().astype(str).unique().tolist())
-            segmento_seleccionado = st.sidebar.selectbox("Filtrar por segmento", segmentos)
-            if segmento_seleccionado != "Todos":
-                df = df[df['segmento'] == segmento_seleccionado]
-        except Exception as e:
-            st.sidebar.error(f"Error al procesar segmentos: {str(e)}")
-    else:
-        st.sidebar.warning("No se encontró columna 'segmento' para filtrar")
-
-    # Filtro de líneas
-    if 'linea' in df.columns:
-        try:
-            lineas = ["Todas"] + sorted(df['linea'].dropna().astype(str).unique().tolist())
-            linea_seleccionada = st.sidebar.selectbox("Filtrar por línea", lineas)
-            if linea_seleccionada != "Todas":
-                df = df[df['linea'] == linea_seleccionada]
-        except Exception as e:
-            st.sidebar.error(f"Error al procesar líneas: {str(e)}")
-    else:
-        st.sidebar.warning("No se encontró columna 'linea' para filtrar")
-
-    # Resumen ejecutivo
-    st.sidebar.divider()
-    st.sidebar.markdown("### 📌 Resumen Ejecutivo")
-
-    if 'valor_ventas' in df.columns:
-        ventas_totales = df['valor_ventas'].sum()
-        st.sidebar.metric("Ventas Totales", f"${ventas_totales:,.0f}")
-    else:
-        st.sidebar.warning("Columna 'valor_ventas' no encontrada")
-
-    if 'nit' in df.columns:
-        clientes_unicos = df['nit'].nunique()
-        st.sidebar.metric("Clientes Únicos", f"{clientes_unicos}")
-    else:
-        st.sidebar.warning("Columna 'nit' no encontrada")
-
-    if 'valor_ventas' in df.columns and not df.empty:
-        ticket_promedio = ventas_totales / len(df)
-        st.sidebar.metric("Ticket Promedio", f"${ticket_promedio:,.0f}")
-
-    # Sección de Resumen Ejecutivo Avanzado
-    st.sidebar.divider()
-    st.sidebar.markdown("### 🧠 Resumen Estratégico")
-
-    if 'valor_ventas' in df.columns:
-        ventas_totales = df['valor_ventas'].sum()
-        
-        # Calcular crecimiento mensual promedio
-        if 'fecha' in df.columns and 'valor_ventas' in df.columns:
-            df_mensual = df.resample('M', on='fecha')['valor_ventas'].sum().reset_index()
-            if len(df_mensual) > 1:
-                crecimiento = ((df_mensual['valor_ventas'].iloc[-1] / df_mensual['valor_ventas'].iloc[-2]) - 1) * 100
-                st.sidebar.metric("Crecimiento Mensual", f"{crecimiento:.1f}%", 
-                                "↑ Positivo" if crecimiento > 0 else "↓ Negativo")
-
-    if 'nit' in df.columns:
-        clientes_unicos = df['nit'].nunique()
-        
-        # Calcular tasa de retención
-        if 'fecha' in df.columns:
-            clientes_activos = df[df['fecha'] > (datetime.now() - pd.DateOffset(months=3))]['nit'].nunique()
-            retencion = (clientes_activos / clientes_unicos * 100) if clientes_unicos > 0 else 0
-            st.sidebar.metric("Tasa de Retención (90 días)", f"{retencion:.1f}%")
-
-    # Años disponibles para comparación
-    if 'año' in df.columns:
-        años_disponibles = sorted(df['año'].unique(), reverse=True)
-        if len(años_disponibles) >= 2:
-            año1 = st.sidebar.selectbox("Seleccionar primer año para comparación", años_disponibles, index=1)
-            año2 = st.sidebar.selectbox("Seleccionar segundo año para comparación", años_disponibles, index=0)
-        else:
-            st.sidebar.warning("Se necesitan al menos dos años para comparación")
-            año1 = año2 = None
-    else:
-        st.sidebar.warning("No se encontró columna 'año' para comparación")
-        año1 = año2 = None
-
-    # Meses disponibles para filtro
-    if 'mes' in df.columns:
-        meses_disponibles = ["Todos"] + sorted(df['mes'].unique(), 
-                                              key=lambda x: datetime.strptime(x, '%B').month)
-        mes_seleccionado = st.sidebar.selectbox("Filtrar por mes", meses_disponibles)
-    else:
-        mes_seleccionado = "Todos"
-
-    # Análisis en pestañas
-    tab1, tab2, tab3, tab4 = st.tabs(["🏆 Rankings", "🧠 Contexto", "🎯 Segmentos", "📊 Comparación Anual"])
-
-    with tab1:
-        analisis_rankings(df)
-
-    with tab2:
-        analisis_contextual(df)
-
-    with tab3:
-        analisis_segmentos(df)
-
-    with tab4:
-        if año1 and año2:
-            df_year1, df_year2 = comparacion_anual(df, año1, año2)
-            
-            if df_year1 is not None and df_year2 is not None:
-                if mes_seleccionado != "Todos":
-                    st.info(f"Filtro aplicado: Mes = {mes_seleccionado}")
-                
-                st.divider()
-                rankings_comparativos(df_year1, df_year2, año1, año2, mes_seleccionado if mes_seleccionado != "Todos" else None)
-        else:
-            st.warning("Seleccione dos años diferentes para comparar en la barra lateral")
-
-    # Sección de Insights Estratégicos Profundos
-    st.divider()
-    st.subheader("🚀 Plan de Acción Estratégico Basado en Hallazgos")
-
-    # Generar insights personalizados con manejo de NaN
-    if 'segmento' in df.columns and 'valor_ventas' in df.columns:
-        # Filtrar segmentos vacíos
-        df_segmentos = df[df['segmento'].notna()].groupby('segmento')['valor_ventas'].sum().reset_index()
-        
-        if not df_segmentos.empty:
-            # Calcular crecimiento potencial evitando divisiones por cero
-            max_ventas = df_segmentos['valor_ventas'].max()
-            df_segmentos['crecimiento_potencial'] = df_segmentos.apply(
-                lambda row: (max_ventas - row['valor_ventas']) / row['valor_ventas'] 
-                if row['valor_ventas'] > 0 else 0, axis=1
-            )
-            
-            # Encontrar segmento con mayor potencial
-            if not df_segmentos['crecimiento_potencial'].empty:
-                segmento_oportunidad = df_segmentos.loc[
-                    df_segmentos['crecimiento_potencial'].idxmax(), 'segmento'
-                ]
-                st.write(f"1. **Oportunidad de crecimiento principal:** Segmento '{segmento_oportunidad}' tiene el mayor potencial de expansión")
-                st.write("   - **Acciones:** Campaña focalizada, desarrollo de productos específicos, asignación de recursos especializados")
-        else:
-            st.warning("No hay datos suficientes para analizar segmentos")
-
-    # Manejo de NaN para análisis de vendedores
-    if 'vendedor' in df.columns and 'valor_ventas' in df.columns:
-        df_vendedores = df[df['vendedor'].notna()].groupby('vendedor')['valor_ventas'].sum().reset_index()
-        
-        if not df_vendedores.empty and len(df_vendedores) > 1:
-            max_ventas = df_vendedores['valor_ventas'].max()
-            min_ventas = df_vendedores['valor_ventas'].min()
-            if max_ventas > 0:
-                brecha_eficiencia = ((max_ventas - min_ventas) / max_ventas) * 100
-                st.write(f"2. **Brecha de eficiencia:** Diferencias de hasta {brecha_eficiencia:.1f}% en desempeño de vendedores")
-                st.write("   - **Acciones:** Programa de mentoría, capacitación en técnicas de ventas, revisión de asignación de clientes")
-        else:
-            st.warning("No hay datos suficientes para analizar vendedores")
-
-    # Manejo de NaN para análisis estacional
-    if 'mes' in df.columns and 'valor_ventas' in df.columns:
-        df_mensual = df[df['mes'].notna()].groupby('mes')['valor_ventas'].sum().reset_index()
-        
-        if not df_mensual.empty and len(df_mensual) > 1:
-            venta_promedio = df_mensual['valor_ventas'].mean()
-            if venta_promedio > 0:
-                variacion_estacional = (df_mensual['valor_ventas'].max() - df_mensual['valor_ventas'].min()) 
-                variacion_estacional = (variacion_estacional / venta_promedio) * 100
-                st.write(f"3. **Estacionalidad marcada:** Variación del {variacion_estacional:.1f}% entre meses pico y valle")
-                st.write("   - **Acciones:** Plan de fuerza de ventas flexible, promociones contraestacionales, gestión de inventario inteligente")
-        else:
-            st.warning("No hay datos suficientes para analizar estacionalidad")
-
-    # Manejo de NaN para análisis de concentración
-    if 'nombre_cliente' in df.columns and 'valor_ventas' in df.columns:
-        df_clientes = df[df['nombre_cliente'].notna()].groupby('nombre_cliente')['valor_ventas'].sum().reset_index()
-        
-        if not df_clientes.empty and len(df_clientes) >= 3:
-            ventas_totales = df_clientes['valor_ventas'].sum()
-            if ventas_totales > 0:
-                concentracion = df_clientes['valor_ventas'].nlargest(3).sum() / ventas_totales * 100
-                st.write(f"4. **Riesgo de concentración:** Top 3 clientes representan el {concentracion:.1f}% de ventas")
-                st.write("   - **Acciones:** Programa de diversificación, desarrollo de clientes medianos, contratos a largo plazo")
-        else:
-            st.warning("No hay datos suficientes para analizar concentración de clientes")
-
-    # Notas finales
-    st.sidebar.divider()
-    st.sidebar.caption(f"🔚 Análisis generado el {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    if not df.empty:
-        st.sidebar.caption(f"📊 {len(df)} registros")
-        if 'ciudad' in df.columns:
-            st.sidebar.caption(f"🏙️ {df['ciudad'].nunique()} ciudades")
-        if 'segmento' in df.columns:
-            st.sidebar.caption(f"🎯 {df['segmento'].nunique()} segmentos")
+# Filtro de fechas
+if 'fecha' in df.columns:
+    min_date = df['fecha'].min().date()
+    max_date = df['fecha'].max().date()
+    fecha_inicio = st.sidebar.date_input("Fecha inicial", min_date)
+    fecha_fin = st.sidebar.date_input("Fecha final", max_date)
+    
+    # Convertir a datetime
+    fecha_inicio = pd.to_datetime(fecha_inicio)
+    fecha_fin = pd.to_datetime(fecha_fin)
+    
+    # Aplicar filtro de fechas
+    df = df[(df['fecha'] >= fecha_inicio) & (df['fecha'] <= fecha_fin)]
 else:
-    st.error("No hay datos disponibles para analizar. Por favor verifica la carga de datos.")
+    st.sidebar.warning("No se encontró columna 'fecha' para filtrar")
+
+# Filtro de ciudades
+if 'ciudad' in df.columns:
+    try:
+        ciudades = ["Todas"] + sorted(df['ciudad'].dropna().astype(str).unique().tolist())
+        ciudad_seleccionada = st.sidebar.selectbox("Filtrar por ciudad", ciudades)
+        if ciudad_seleccionada != "Todas":
+            df = df[df['ciudad'] == ciudad_seleccionada]
+    except Exception as e:
+        st.sidebar.error(f"Error al procesar ciudades: {str(e)}")
+else:
+    st.sidebar.warning("No se encontró columna 'ciudad' para filtrar")
+
+# Filtro de segmentos
+if 'segmento' in df.columns:
+    try:
+        segmentos = ["Todos"] + sorted(df['segmento'].dropna().astype(str).unique().tolist())
+        segmento_seleccionado = st.sidebar.selectbox("Filtrar por segmento", segmentos)
+        if segmento_seleccionado != "Todos":
+            df = df[df['segmento'] == segmento_seleccionado]
+    except Exception as e:
+        st.sidebar.error(f"Error al procesar segmentos: {str(e)}")
+else:
+    st.sidebar.warning("No se encontró columna 'segmento' para filtrar")
+
+# Filtro de líneas
+if 'linea' in df.columns:
+    try:
+        lineas = ["Todas"] + sorted(df['linea'].dropna().astype(str).unique().tolist())
+        linea_seleccionada = st.sidebar.selectbox("Filtrar por línea", lineas)
+        if linea_seleccionada != "Todas":
+            df = df[df['linea'] == linea_seleccionada]
+    except Exception as e:
+        st.sidebar.error(f"Error al procesar líneas: {str(e)}")
+else:
+    st.sidebar.warning("No se encontró columna 'linea' para filtrar")
+
+# Resumen ejecutivo
+st.sidebar.divider()
+st.sidebar.markdown("### 📌 Resumen Ejecutivo")
+
+if 'valor_ventas' in df.columns:
+    ventas_totales = df['valor_ventas'].sum()
+    st.sidebar.metric("Ventas Totales", f"${ventas_totales:,.0f}")
+else:
+    st.sidebar.warning("Columna 'valor_ventas' no encontrada")
+
+if 'nit' in df.columns:
+    clientes_unicos = df['nit'].nunique()
+    st.sidebar.metric("Clientes Únicos", f"{clientes_unicos}")
+else:
+    st.sidebar.warning("Columna 'nit' no encontrada")
+
+if 'valor_ventas' in df.columns and not df.empty:
+    ticket_promedio = ventas_totales / len(df)
+    st.sidebar.metric("Ticket Promedio", f"${ticket_promedio:,.0f}")
+
+# Sección de Resumen Ejecutivo Avanzado
+st.sidebar.divider()
+st.sidebar.markdown("### 🧠 Resumen Estratégico")
+
+if 'valor_ventas' in df.columns:
+    ventas_totales = df['valor_ventas'].sum()
+    
+    # Calcular crecimiento mensual promedio
+    if 'fecha' in df.columns and 'valor_ventas' in df.columns:
+        df_mensual = df.resample('M', on='fecha')['valor_ventas'].sum().reset_index()
+        if len(df_mensual) > 1:
+            crecimiento = ((df_mensual['valor_ventas'].iloc[-1] / df_mensual['valor_ventas'].iloc[-2]) - 1) * 100
+            st.sidebar.metric("Crecimiento Mensual", f"{crecimiento:.1f}%", 
+                            "↑ Positivo" if crecimiento > 0 else "↓ Negativo")
+
+if 'nit' in df.columns:
+    clientes_unicos = df['nit'].nunique()
+    
+    # Calcular tasa de retención
+    if 'fecha' in df.columns:
+        clientes_activos = df[df['fecha'] > (datetime.now() - pd.DateOffset(months=3))]['nit'].nunique()
+        retencion = (clientes_activos / clientes_unicos * 100) if clientes_unicos > 0 else 0
+        st.sidebar.metric("Tasa de Retención (90 días)", f"{retencion:.1f}%")
+
+# Años disponibles para comparación
+if 'año' in df.columns:
+    años_disponibles = sorted(df['año'].unique(), reverse=True)
+    if len(años_disponibles) >= 2:
+        año1 = st.sidebar.selectbox("Seleccionar primer año para comparación", años_disponibles, index=1)
+        año2 = st.sidebar.selectbox("Seleccionar segundo año para comparación", años_disponibles, index=0)
+    else:
+        st.sidebar.warning("Se necesitan al menos dos años para comparación")
+        año1 = año2 = None
+else:
+    st.sidebar.warning("No se encontró columna 'año' para comparación")
+    año1 = año2 = None
+
+# Meses disponibles para filtro
+if 'mes' in df.columns:
+    meses_disponibles = ["Todos"] + sorted(df['mes'].unique(), 
+                                          key=lambda x: datetime.strptime(x, '%B').month)
+    mes_seleccionado = st.sidebar.selectbox("Filtrar por mes", meses_disponibles)
+else:
+    mes_seleccionado = "Todos"
+
+# Análisis en pestañas
+tab1, tab2, tab3, tab4 = st.tabs(["🏆 Rankings", "🧠 Contexto", "🎯 Segmentos", "📊 Comparación Anual"])
+
+with tab1:
+    analisis_rankings(df)
+
+with tab2:
+    analisis_contextual(df)
+
+with tab3:
+    analisis_segmentos(df)
+
+with tab4:
+    if año1 and año2:
+        df_year1, df_year2 = comparacion_anual(df, año1, año2)
+        
+        if df_year1 is not None and df_year2 is not None:
+            if mes_seleccionado != "Todos":
+                st.info(f"Filtro aplicado: Mes = {mes_seleccionado}")
+            
+            st.divider()
+            rankings_comparativos(df_year1, df_year2, año1, año2, mes_seleccionado if mes_seleccionado != "Todos" else None)
+    else:
+        st.warning("Seleccione dos años diferentes para comparar en la barra lateral")
+
+# Sección de Insights Estratégicos Profundos
+st.divider()
+st.subheader("🚀 Plan de Acción Estratégico Basado en Hallazgos")
+
+# Generar insights personalizados con manejo de NaN
+if 'segmento' in df.columns and 'valor_ventas' in df.columns:
+    # Filtrar segmentos vacíos
+    df_segmentos = df[df['segmento'].notna()].groupby('segmento')['valor_ventas'].sum().reset_index()
+    
+    if not df_segmentos.empty:
+        # Calcular crecimiento potencial evitando divisiones por cero
+        max_ventas = df_segmentos['valor_ventas'].max()
+        df_segmentos['crecimiento_potencial'] = df_segmentos.apply(
+            lambda row: (max_ventas - row['valor_ventas']) / row['valor_ventas'] 
+            if row['valor_ventas'] > 0 else 0, axis=1
+        )
+        
+        # Encontrar segmento con mayor potencial
+        if not df_segmentos['crecimiento_potencial'].empty:
+            segmento_oportunidad = df_segmentos.loc[
+                df_segmentos['crecimiento_potencial'].idxmax(), 'segmento'
+            ]
+            st.write(f"1. **Oportunidad de crecimiento principal:** Segmento '{segmento_oportunidad}' tiene el mayor potencial de expansión")
+            st.write("   - **Acciones:** Campaña focalizada, desarrollo de productos específicos, asignación de recursos especializados")
+    else:
+        st.warning("No hay datos suficientes para analizar segmentos")
+
+# Manejo de NaN para análisis de vendedores
+if 'vendedor' in df.columns and 'valor_ventas' in df.columns:
+    df_vendedores = df[df['vendedor'].notna()].groupby('vendedor')['valor_ventas'].sum().reset_index()
+    
+    if not df_vendedores.empty and len(df_vendedores) > 1:
+        max_ventas = df_vendedores['valor_ventas'].max()
+        min_ventas = df_vendedores['valor_ventas'].min()
+        if max_ventas > 0:
+            brecha_eficiencia = ((max_ventas - min_ventas) / max_ventas) * 100
+            st.write(f"2. **Brecha de eficiencia:** Diferencias de hasta {brecha_eficiencia:.1f}% en desempeño de vendedores")
+            st.write("   - **Acciones:** Programa de mentoría, capacitación en técnicas de ventas, revisión de asignación de clientes")
+    else:
+        st.warning("No hay datos suficientes para analizar vendedores")
+
+# Manejo de NaN para análisis estacional
+if 'mes' in df.columns and 'valor_ventas' in df.columns:
+    df_mensual = df[df['mes'].notna()].groupby('mes')['valor_ventas'].sum().reset_index()
+    
+    if not df_mensual.empty and len(df_mensual) > 1:
+        venta_promedio = df_mensual['valor_ventas'].mean()
+        if venta_promedio > 0:
+            variacion_estacional = (df_mensual['valor_ventas'].max() - df_mensual['valor_ventas'].min()) 
+            variacion_estacional = (variacion_estacional / venta_promedio) * 100
+            st.write(f"3. **Estacionalidad marcada:** Variación del {variacion_estacional:.1f}% entre meses pico y valle")
+            st.write("   - **Acciones:** Plan de fuerza de ventas flexible, promociones contraestacionales, gestión de inventario inteligente")
+    else:
+        st.warning("No hay datos suficientes para analizar estacionalidad")
+
+# Manejo de NaN para análisis de concentración
+if 'nombre_cliente' in df.columns and 'valor_ventas' in df.columns:
+    df_clientes = df[df['nombre_cliente'].notna()].groupby('nombre_cliente')['valor_ventas'].sum().reset_index()
+    
+    if not df_clientes.empty and len(df_clientes) >= 3:
+        ventas_totales = df_clientes['valor_ventas'].sum()
+        if ventas_totales > 0:
+            concentracion = df_clientes['valor_ventas'].nlargest(3).sum() / ventas_totales * 100
+            st.write(f"4. **Riesgo de concentración:** Top 3 clientes representan el {concentracion:.1f}% de ventas")
+            st.write("   - **Acciones:** Programa de diversificación, desarrollo de clientes medianos, contratos a largo plazo")
+    else:
+        st.warning("No hay datos suficientes para analizar concentración de clientes")
+
+# Notas finales
+st.sidebar.divider()
+st.sidebar.caption(f"🔚 Análisis generado el {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+if not df.empty:
+    st.sidebar.caption(f"📊 {len(df)} registros")
+    if 'ciudad' in df.columns:
+        st.sidebar.caption(f"🏙️ {df['ciudad'].nunique()} ciudades")
+    if 'segmento' in df.columns:
+        st.sidebar.caption(f"🎯 {df['segmento'].nunique()} segmentos")
 
